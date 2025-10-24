@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Season Strategy Map (Tiled)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+    header { padding: 8px 12px; background: #111; color: #f6d26b; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    header h1 { font-size: 18px; margin: 0; letter-spacing: 0.5px; }
+    header .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    header input[type="number"], header input[type="text"], header select { padding: 6px 8px; border-radius: 8px; border: 1px solid #555; background:#1a1a1a; color:#fff; width: 90px; }
+    header button { padding: 6px 10px; border-radius: 10px; border: none; background: #f6d26b; color: #222; font-weight: 600; cursor: pointer; }
+    header button.secondary { background:#333; color:#eee; border:1px solid #555; }
+    #map { width: 100%; height: 100%; }
+    .leaflet-container { background: #0d0d0d; }
+    .legend { position: absolute; top: 10px; right: 10px; background: rgba(17,17,17,0.9); color: #eee; padding: 8px 10px; border-radius: 10px; font-size: 12px; line-height: 1.5; }
+    .legend .swatch { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:middle; }
+    .popup form { display: grid; gap: 6px; }
+    .popup textarea { width: 220px; height: 100px; }
+    .footer { position:absolute; left:10px; bottom:10px; background: rgba(17,17,17,0.85); color:#bbb; padding:6px 10px; font-size:12px; border-radius:10px;}
+    .file-input { display:none; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Season Strategy Map</h1>
+      <div class="controls">
+        <label>Map image URL: <input id="imgUrl" type="text" placeholder="map.png"/></label>
+        <label>Image width(px): <input id="imgW" type="number" value="2048" min="100"/></label>
+        <label>Image height(px): <input id="imgH" type="number" value="2048" min="100"/></label>
+        <label>Grid: 
+          <input id="rows" type="number" value="20" min="2"/> × 
+          <input id="cols" type="number" value="20" min="2"/>
+        </label>
+        <button id="apply">Apply/Reload</button>
+        <select id="defaultStatus">
+          <option value="neutral" selected>New tile status: Neutral</option>
+          <option value="target">Target</option>
+          <option value="owned">Owned</option>
+          <option value="blocked">Blocked</option>
+        </select>
+        <button id="export">Export JSON</button>
+        <button id="import" class="secondary">Import JSON</button>
+        <input id="importFile" class="file-input" type="file" accept="application/json"/>
+        <button id="clear" class="secondary">Clear Local Data</button>
+      </div>
+    </header>
+    <div id="map"></div>
+  </div>
+
+  <div class="legend">
+    <div><span class="swatch" style="background:#5e5e5e;"></span>Neutral</div>
+    <div><span class="swatch" style="background:#e85d5d;"></span>Target</div>
+    <div><span class="swatch" style="background:#49b36b;"></span>Owned</div>
+    <div><span class="swatch" style="background:#8a5de8;"></span>Blocked</div>
+    <div style="margin-top:6px;">Click a tile to add notes & set status.</div>
+  </div>
+  <div class="footer">Tip: host this single HTML file on Netlify/GitHub Pages for a shareable map. Use Export/Import to sync with your team.</div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const STATUS = {
+      neutral: { color: "#5e5e5e", fillOpacity: 0.25 },
+      target : { color: "#e85d5d", fillOpacity: 0.35 },
+      owned  : { color: "#49b36b", fillOpacity: 0.35 },
+      blocked: { color: "#8a5de8", fillOpacity: 0.35 },
+    };
+
+    let map, overlay, grid = [];
+    let state = loadState();
+
+    function loadState(){ try { return JSON.parse(localStorage.getItem("strategy-map-state")) || {}; } catch { return {}; } }
+    function saveState(){ localStorage.setItem("strategy-map-state", JSON.stringify(state)); }
+
+    function buildMap(imgUrl, width, height, rows, cols){
+      if (map) { map.remove(); grid = []; }
+      map = L.map('map', { crs: L.CRS.Simple, minZoom: -3 });
+      const southWest = [0,0], northEast = [height, width];
+      const bounds = new L.LatLngBounds(southWest, northEast);
+      overlay = L.imageOverlay(imgUrl, bounds).addTo(map);
+      map.fitBounds(bounds);
+
+      const tileH = height / rows;
+      const tileW = width / cols;
+
+      // draw grid
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const id = `${r}-${c}`;
+          const data = state[id] || { status: document.getElementById('defaultStatus').value, note: "" };
+          const rect = L.rectangle([
+            [r*tileH, c*tileW],
+            [(r+1)*tileH, (c+1)*tileW]
+          ], {
+            color: STATUS[data.status].color,
+            weight: 1,
+            fill: true,
+            fillOpacity: STATUS[data.status].fillOpacity
+          }).addTo(map);
+
+          rect.on('click', () => openPopup(rect, id, r, c, data));
+          grid.push({ id, rect });
+        }
+      }
+    }
+
+    function openPopup(layer, id, r, c, data){
+      const content = document.createElement('div');
+      content.className = 'popup';
+      content.innerHTML = `
+        <form>
+          <strong>Tile:</strong> ${id}<br/>
+          <label>Status: 
+            <select id="statusSel">
+              <option value="neutral" ${data.status==='neutral'?'selected':''}>Neutral</option>
+              <option value="target" ${data.status==='target'?'selected':''}>Target</option>
+              <option value="owned" ${data.status==='owned'?'selected':''}>Owned</option>
+              <option value="blocked" ${data.status==='blocked'?'selected':''}>Blocked</option>
+            </select>
+          </label>
+          <label>Notes:<br/>
+            <textarea id="noteArea" placeholder="Plans, squads, timing, etc.">${data.note || ''}</textarea>
+          </label>
+          <button type="button" id="saveBtn">Save</button>
+        </form>
+      `;
+      const popup = L.popup().setLatLng(layer.getBounds().getCenter()).setContent(content);
+      popup.openOn(map);
+
+      content.querySelector('#saveBtn').addEventListener('click', () => {
+        const status = content.querySelector('#statusSel').value;
+        const note = content.querySelector('#noteArea').value;
+        state[id] = { status, note };
+        saveState();
+        // recolor
+        const s = STATUS[status];
+        layer.setStyle({ color: s.color, fillOpacity: s.fillOpacity });
+        map.closePopup(popup);
+      });
+    }
+
+    // Controls
+    document.getElementById('apply').addEventListener('click', () => {
+      const imgUrl = document.getElementById('imgUrl').value || 'map.png';
+      const w = parseInt(document.getElementById('imgW').value, 10);
+      const h = parseInt(document.getElementById('imgH').value, 10);
+      const rows = parseInt(document.getElementById('rows').value, 10);
+      const cols = parseInt(document.getElementById('cols').value, 10);
+      buildMap(imgUrl, w, h, rows, cols);
+    });
+
+    document.getElementById('export').addEventListener('click', () => {
+      const data = {
+        meta: {
+          imgUrl: document.getElementById('imgUrl').value || 'map.png',
+          width: parseInt(document.getElementById('imgW').value, 10),
+          height: parseInt(document.getElementById('imgH').value, 10),
+          rows: parseInt(document.getElementById('rows').value, 10),
+          cols: parseInt(document.getElementById('cols').value, 10),
+          updatedAt: new Date().toISOString()
+        },
+        tiles: state
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'season_strategy_map.json';
+      a.click();
+    });
+
+    document.getElementById('import').addEventListener('click', () => {
+      document.getElementById('importFile').click();
+    });
+    document.getElementById('importFile').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (data.meta){
+            document.getElementById('imgUrl').value = data.meta.imgUrl || 'map.png';
+            document.getElementById('imgW').value = data.meta.width || 2048;
+            document.getElementById('imgH').value = data.meta.height || 2048;
+            document.getElementById('rows').value = data.meta.rows || 20;
+            document.getElementById('cols').value = data.meta.cols || 20;
+          }
+          state = data.tiles || {};
+          saveState();
+          document.getElementById('apply').click();
+        } catch (err){
+          alert('Invalid JSON file');
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById('clear').addEventListener('click', () => {
+      if (confirm('Clear local data for this map?')){
+        localStorage.removeItem('strategy-map-state');
+        state = {};
+        document.getElementById('apply').click();
+      }
+    });
+
+    // initial render (you can set your real map URL here)
+    document.getElementById('imgUrl').value = 'map.png'; // replace with your hosted Season 5 map image URL
+    document.getElementById('apply').click();
+  </script>
+</body>
+</html>
