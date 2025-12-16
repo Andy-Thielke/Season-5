@@ -41,7 +41,7 @@ window.addEventListener("load", () => {
 
   const map = L.map("map", {
     crs: L.CRS.Simple,
-    minZoom: -4,
+    minZoom: 0,
     maxZoom: 3
   });
 
@@ -56,7 +56,7 @@ window.addEventListener("load", () => {
      Koordinaten: [x, y]
   ====================================================== */
   const SHAPES = {
-    SQUARE2: [
+    quadrat: [
       [0,0],[1,0],
       [0,1],[1,1]
     ],
@@ -69,7 +69,7 @@ window.addEventListener("load", () => {
       [1,0],[2,0],
       [0,1],[1,1],[2,1],[3,1]
     ],
-    CROSS: [
+    kreuz: [
       [1,0],[2,0],
       [0,1],[1,1],[2,1],[3,1],
       [0,2],[1,2],[2,2],[3,2],
@@ -181,10 +181,9 @@ window.addEventListener("load", () => {
 
   const ROW_TYPES = {
     R1: [
-      {shape:"L2", rot:0,  repeat:1,  color:COLORS.A},
-      {shape:"CROSS", rot:0, repeat:12, color:COLORS.B},
-      {shape:"L2", rot:90, repeat:1,  color:COLORS.A}
-    ]
+      {shape:"L1", rot:90,  repeat:1,  color:COLORS.A},
+      {shape:"TForm", rot:0, repeat:12, color:COLORS.B}
+      ]
   };
 
   const ROW_PLAN = [
