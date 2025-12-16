@@ -31,8 +31,8 @@ const CELL_W = IMG_WIDTH  / GRID_W;
 const CELL_H = IMG_HEIGHT / GRID_H;
 
 // Feinjustage (Pixel, +/- erlaubt)
-const OFFSET_X = -15;
-const OFFSET_Y = -10;
+const OFFSET_X = -13;
+const OFFSET_Y = -13;
 
 /* ======================================================
    LEAFLET MAP
@@ -182,12 +182,12 @@ window.addEventListener("load", () => {
   const ROW_TYPES = {
     R1: [
       {shape:"L1", rot:-90,  repeat:1,  color:COLORS.A},
-      {shape:"TForm", rot:0, repeat:12, color:COLORS.B}
+      {shape:"TForm", rot:180, repeat:12, color:COLORS.B}
       ]
   };
 
   const ROW_PLAN = [
-    {rowType:"R1", repeatRows:10}
+    {rowType:"R1", repeatRows:1}
   ];
 
   /* ======================================================
