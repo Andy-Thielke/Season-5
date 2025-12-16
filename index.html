@@ -46,7 +46,7 @@ window.addEventListener("load", () => {
   });
 
   const bounds = [[0,0],[IMG_HEIGHT,IMG_WIDTH]];
-  L.imageOverlay("map.jpg", bounds).addTo(map);
+  L.imageOverlay("map.png", bounds).addTo(map);
   map.fitBounds(bounds);
 
   const zoneLayer = L.layerGroup().addTo(map);
